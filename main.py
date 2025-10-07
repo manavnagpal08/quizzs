@@ -1,49 +1,30 @@
 import streamlit as st
-import pdfplumber
-import re
 
-st.set_page_config(page_title="PDF Quiz App", layout="centered")
-st.title("📘 Interactive Quiz from PDF")
+# Sample MCQs
+mcqs = [
+    {"question": "1. What is the maximum height of a Red-Black Tree with n nodes?",
+     "options": ["2*log(n+1)", "log(n)", "n-1", "n/2"], "answer": "2*log(n+1)"},
+    {"question": "2. Which of the following is true about Red-Black Trees?",
+     "options": ["Every red node must have red children", "All leaves are black", "Root must be red", "Black height can vary"], "answer": "All leaves are black"},
+    {"question": "3. What is the color of leaves in a Red-Black Tree?",
+     "options": ["Red", "Black", "Can be either", "Depends on parent"], "answer": "Black"},
+    {"question": "4. In a Red-Black Tree, a red node can have how many red children?",
+     "options": ["0", "1", "2", "3"], "answer": "0"},
+]
 
-uploaded_pdf = st.file_uploader("Upload your PDF file with MCQs", type=["pdf"])
+st.title("Red-Black Tree Quiz")
 
-if uploaded_pdf:
-    with pdfplumber.open(uploaded_pdf) as pdf:
-        text = ""
-        for page in pdf.pages:
-            text += page.extract_text() + "\n"
+score = 0
 
-    # --- Basic MCQ Parsing ---
-    # Expected format:
-    # 1. Question
-    # A. Option 1
-    # B. Option 2
-    # C. Option 3
-    # D. Option 4
-    # Answer: B
+for i, mcq in enumerate(mcqs):
+    st.subheader(mcq["question"])
+    user_answer = st.radio("Select your answer:", mcq["options"], key=f"q{i}")
+    if user_answer:
+        if st.button("Check Answer", key=f"btn{i}"):
+            if user_answer == mcq["answer"]:
+                st.success("✅ Correct!")
+                score += 1
+            else:
+                st.error(f"❌ Wrong! Correct answer: {mcq['answer']}")
 
-    pattern = re.compile(
-        r"(\d+\..+?)(?:\n\s*[A-D]\..+?){4,}\n\s*Answer\s*[:\-]?\s*([A-D])",
-        re.DOTALL
-    )
-    matches = pattern.findall(text)
-
-    if not matches:
-        st.error("❌ No MCQs found. Check PDF format.")
-    else:
-        st.success(f"✅ Found {len(matches)} questions!")
-
-        for i, (block, answer) in enumerate(matches, 1):
-            st.markdown(f"### Q{i}. {block.splitlines()[0]}")
-            options = re.findall(r"[A-D]\.\s*(.+)", block)
-
-            user_choice = st.radio(f"Select answer for Question {i}", options, key=f"q_{i}")
-
-            correct_option = ord(answer.strip()) - 65
-            if user_choice:
-                if options.index(user_choice) == correct_option:
-                    st.markdown("✅ **Correct!**")
-                else:
-                    st.markdown(f"❌ **Wrong!** Correct Answer: {answer}. {options[correct_option]}")
-else:
-    st.info("👆 Upload a PDF file to start the quiz.")
+st.write(f"Your score: {score}/{len(mcqs)}")
