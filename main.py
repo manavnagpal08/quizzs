@@ -1,26 +1,21 @@
 import streamlit as st
-import fitz  # PyMuPDF
+import pdfplumber
 import re
-from io import BytesIO
 
-st.set_page_config(page_title="Smart Quiz Extractor", layout="centered")
+st.set_page_config(page_title="PDF Quiz App", layout="centered")
+st.title("📘 Interactive Quiz from PDF")
 
-st.title("📘 AI Quiz Extractor from PDF")
-st.caption("Upload a PDF containing MCQs — the app will extract, display, and let you play interactively!")
-
-# --- Upload PDF ---
-uploaded_pdf = st.file_uploader("📂 Upload your PDF file with MCQs", type=["pdf"])
+uploaded_pdf = st.file_uploader("Upload your PDF file with MCQs", type=["pdf"])
 
 if uploaded_pdf:
-    # --- Read PDF text ---
-    pdf_doc = fitz.open(stream=uploaded_pdf.read(), filetype="pdf")
-    text = ""
-    for page in pdf_doc:
-        text += page.get_text("text")
+    with pdfplumber.open(uploaded_pdf) as pdf:
+        text = ""
+        for page in pdf.pages:
+            text += page.extract_text() + "\n"
 
-    # --- Basic MCQ Parsing Logic ---
+    # --- Basic MCQ Parsing ---
     # Expected format:
-    # 1. Question text
+    # 1. Question
     # A. Option 1
     # B. Option 2
     # C. Option 3
@@ -28,40 +23,27 @@ if uploaded_pdf:
     # Answer: B
 
     pattern = re.compile(
-        r"(\d+\.\s*.+?)(?:\n\s*[A-D]\..+?){4,}\n\s*Answer\s*[:\-]?\s*([A-D])",
+        r"(\d+\..+?)(?:\n\s*[A-D]\..+?){4,}\n\s*Answer\s*[:\-]?\s*([A-D])",
         re.DOTALL
     )
-
     matches = pattern.findall(text)
 
     if not matches:
-        st.error("❌ No valid MCQs found. Please check your PDF format.")
+        st.error("❌ No MCQs found. Check PDF format.")
     else:
         st.success(f"✅ Found {len(matches)} questions!")
-        score = st.session_state.get("score", 0)
-        total = len(matches)
 
-        # --- Display Questions ---
         for i, (block, answer) in enumerate(matches, 1):
             st.markdown(f"### Q{i}. {block.splitlines()[0]}")
             options = re.findall(r"[A-D]\.\s*(.+)", block)
-            
-            # Create radio buttons for each question
-            user_choice = st.radio(
-                f"Select answer for Question {i}",
-                options,
-                key=f"q_{i}"
-            )
 
-            # Check correctness
-            correct_option = ord(answer.strip()) - 65  # Convert A->0, B->1...
+            user_choice = st.radio(f"Select answer for Question {i}", options, key=f"q_{i}")
+
+            correct_option = ord(answer.strip()) - 65
             if user_choice:
                 if options.index(user_choice) == correct_option:
-                    st.markdown("✅ **Correct!**", unsafe_allow_html=True)
+                    st.markdown("✅ **Correct!**")
                 else:
                     st.markdown(f"❌ **Wrong!** Correct Answer: {answer}. {options[correct_option]}")
-
-        st.info("💡 Tip: Format your PDF with clear 'Answer: A/B/C/D' after each question.")
-
 else:
-    st.markdown("👆 Upload a PDF file to start the quiz.")
+    st.info("👆 Upload a PDF file to start the quiz.")
