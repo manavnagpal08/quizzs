@@ -14,6 +14,11 @@ st.title("🛡️ High-Accuracy Resume Trust Score Analyzer")
 st.write("Upload a resume (PDF, DOCX, ODT) and get a realistic trust score based on deep text, metadata, and simulated verification.")
 
 # -------------------------------
+# File Upload (FIXED: Added missing file uploader component)
+# -------------------------------
+uploaded_file = st.file_uploader("Upload Resume", type=["pdf", "docx", "odt"])
+
+# -------------------------------
 # Helper Functions for File Extraction
 # -------------------------------
 def extract_text_pdf(file):
