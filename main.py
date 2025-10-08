@@ -1,65 +1,85 @@
 import streamlit as st
+from PyPDF2 import PdfReader
+from docx import Document
+from odf.opendocument import load
+from odf.text import P
 import random
+import re
+from io import BytesIO
 
-st.set_page_config(page_title="Resume Trust Score Demo", page_icon="🛡️", layout="centered")
+# -------------------------------
+# 🎯 Page Setup
+# -------------------------------
+st.set_page_config(page_title="Resume Trust Score", page_icon="🛡️", layout="centered")
+st.title("🛡️ Resume Trust Score Analyzer")
+st.write("Upload a resume file (PDF, DOCX, or ODT) to check authenticity indicators and compute a trust score.")
 
-st.title("🛡️ Resume Trust Score – Sample Demo")
+# -------------------------------
+# 📤 File Upload
+# -------------------------------
+uploaded_file = st.file_uploader("Upload Resume", type=["pdf", "docx", "odt"])
 
-# ---- Simulated Candidate Data ----
-sample_candidates = [
-    {
-        "name": "Priya Sharma",
-        "metadata_check": "clean",
-        "profile_match_score": 0.9,
-        "skill_test_score": 0.88,
-        "id_verified": True,
-        "text_realism_score": 0.85
-    },
-    {
-        "name": "Rohit Kumar",
-        "metadata_check": "suspicious",
-        "profile_match_score": 0.45,
-        "skill_test_score": 0.55,
-        "id_verified": False,
-        "text_realism_score": 0.4
-    },
-    {
-        "name": "Ananya Rao",
-        "metadata_check": "clean",
-        "profile_match_score": 0.95,
-        "skill_test_score": 0.9,
-        "id_verified": True,
-        "text_realism_score": 0.92
-    }
-]
+# -------------------------------
+# 🧩 Helper Functions
+# -------------------------------
+def extract_text_from_pdf(file):
+    reader = PdfReader(file)
+    text = ""
+    for page in reader.pages:
+        text += page.extract_text() or ""
+    metadata = reader.metadata
+    return text, metadata
 
-# ---- Trust Score Function ----
-def calculate_resume_trust_score(candidate):
+def extract_text_from_docx(file):
+    doc = Document(file)
+    text = "\n".join([p.text for p in doc.paragraphs])
+    metadata = {"author": doc.core_properties.author, "created": doc.core_properties.created}
+    return text, metadata
+
+def extract_text_from_odt(file):
+    odt_doc = load(file)
+    paragraphs = odt_doc.getElementsByType(P)
+    text = "\n".join([str(p.firstChild.data) if p.firstChild else "" for p in paragraphs])
+    metadata = {"generator": odt_doc.meta.generator, "initial_creator": odt_doc.meta.initial_creator}
+    return text, metadata
+
+def analyze_resume_text(text):
+    """Basic heuristic checks for simplicity"""
+    word_count = len(text.split())
+    keyword_hits = sum(1 for kw in ["python", "machine", "project", "experience", "intern", "data", "developer"] if kw.lower() in text.lower())
+    ai_like_phrases = len(re.findall(r"\b(passio[n|t]ate|motivated|detail-oriented|team player|dynamic professional)\b", text.lower()))
+
+    # Simple heuristic scoring
+    text_score = min(1.0, (keyword_hits * 0.1 + word_count / 1000) - (ai_like_phrases * 0.05))
+    return round(max(0.0, text_score), 2)
+
+def calculate_trust_score(metadata, text_score):
     score = 0
 
-    # 1. Metadata authenticity
-    if candidate["metadata_check"] == "clean":
-        score += 15
-    elif candidate["metadata_check"] == "suspicious":
-        score += 7
+    # Metadata authenticity (15%)
+    if metadata:
+        meta_str = str(metadata).lower()
+        if any(x in meta_str for x in ["microsoft", "libreoffice", "google docs", "word", "writer"]):
+            score += 12
+        else:
+            score += 7
+    else:
+        score += 5
 
-    # 2. Profile verification (weighted 25%)
-    score += candidate.get("profile_match_score", 0) * 25
+    # Profile/skills simulated (25%)
+    score += random.uniform(10, 25)
 
-    # 3. Skill validation (weighted 25%)
-    score += candidate.get("skill_test_score", 0) * 25
+    # Skill validation simulated (25%)
+    score += random.uniform(10, 25)
 
-    # 4. Identity verification (weighted 20%)
-    if candidate.get("id_verified"):
-        score += 20
+    # Identity verification simulated (20%)
+    score += random.uniform(5, 20)
 
-    # 5. Text authenticity (weighted 15%)
-    score += candidate.get("text_realism_score", 0) * 15
+    # Text authenticity (15%)
+    score += text_score * 15
 
     return round(min(score, 100), 2)
 
-
-# ---- Badge Generator ----
 def get_badge(score):
     if score >= 85:
         return "🏆 Trusted"
@@ -70,38 +90,52 @@ def get_badge(score):
     else:
         return "❌ Fake/Unverified"
 
+# -------------------------------
+# 🧮 Main Logic
+# -------------------------------
+if uploaded_file:
+    st.success(f"File uploaded: {uploaded_file.name}")
+    file_type = uploaded_file.name.split(".")[-1].lower()
 
-# ---- Display Section ----
-st.subheader("Candidate Verification Results")
+    try:
+        if file_type == "pdf":
+            text, metadata = extract_text_from_pdf(uploaded_file)
+        elif file_type == "docx":
+            text, metadata = extract_text_from_docx(uploaded_file)
+        elif file_type == "odt":
+            text, metadata = extract_text_from_odt(uploaded_file)
+        else:
+            st.error("Unsupported file type.")
+            st.stop()
 
-for c in sample_candidates:
-    c["trust_score"] = calculate_resume_trust_score(c)
-    c["badge"] = get_badge(c["trust_score"])
+        if not text.strip():
+            st.warning("No readable text found in the file. Please upload a text-based resume.")
+        else:
+            text_score = analyze_resume_text(text)
+            trust_score = calculate_trust_score(metadata, text_score)
+            badge = get_badge(trust_score)
 
-    st.markdown(f"### 👤 {c['name']}")
-    st.progress(c["trust_score"] / 100)
-    st.markdown(f"**Trust Score:** {c['trust_score']} / 100  &nbsp;&nbsp;|&nbsp;&nbsp; **Badge:** {c['badge']}")
-    with st.expander("View Verification Summary"):
-        st.json({
-            "Metadata": c["metadata_check"],
-            "Profile Match": c["profile_match_score"],
-            "Skill Test": c["skill_test_score"],
-            "Identity Verified": c["id_verified"],
-            "AI Authenticity": c["text_realism_score"]
-        })
-    st.divider()
+            # Display results
+            st.divider()
+            st.markdown(f"### 🧾 Resume Summary")
+            st.write(f"**Total Words:** {len(text.split())}")
+            st.write(f"**Detected Keywords:** {text_score * 10:.0f}")
+            st.write(f"**AI-like Phrases:** Heuristic applied automatically")
 
-# Optional: random test button
-if st.button("🔄 Generate Random Candidate"):
-    st.toast("Simulated random candidate score generated!", icon="🧠")
-    rand_cand = {
-        "name": f"Candidate {random.randint(1,100)}",
-        "metadata_check": random.choice(["clean", "suspicious"]),
-        "profile_match_score": random.random(),
-        "skill_test_score": random.random(),
-        "id_verified": random.choice([True, False]),
-        "text_realism_score": random.random()
-    }
-    rand_cand["trust_score"] = calculate_resume_trust_score(rand_cand)
-    rand_cand["badge"] = get_badge(rand_cand["trust_score"])
-    st.write(rand_cand)
+            st.divider()
+            st.markdown(f"### 🔐 Trust Score Results")
+            st.progress(trust_score / 100)
+            st.markdown(f"**Score:** `{trust_score} / 100`")
+            st.markdown(f"**Badge:** {badge}")
+
+            with st.expander("🔍 View Extracted Metadata"):
+                st.json({k: str(v) for k, v in metadata.items() if v})
+
+            with st.expander("🧠 Raw Extracted Text (first 500 chars)"):
+                st.text(text[:500] + ("..." if len(text) > 500 else ""))
+
+    except Exception as e:
+        st.error(f"Error reading file: {e}")
+
+else:
+    st.info("Please upload a resume file to start analysis.")
